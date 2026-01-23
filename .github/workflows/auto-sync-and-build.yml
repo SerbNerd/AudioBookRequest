@@ -1,0 +1,61 @@
+name: Auto-Sync Upstream & Build Docker Image
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:  # Also allow manual trigger
+
+jobs:
+  sync-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/markbeep/AudioBookRequest.git
+
+      - name: Fetch upstream
+        run: git fetch upstream main
+
+      - name: Rebase on upstream/main
+        run: |
+          git checkout feat/oidc-auto-redirect-detection
+          git rebase upstream/main
+
+      - name: Push to fork
+        run: git push origin feat/oidc-auto-redirect-detection --force-with-lease
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/serbnerd/audiobookrequest:feat-oidc-auto-redirect-detection
+            ghcr.io/serbnerd/audiobookrequest:oidc-latest
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "⚠️ Auto-sync failed - likely merge conflict"
+          echo "Manual intervention needed on feat/oidc-auto-redirect-detection branch"
