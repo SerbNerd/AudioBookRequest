@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.internal.auth.login_types import LoginTypeEnum
+from app.util.log import logger
 
 
 class DBSettings(BaseModel):
@@ -68,3 +69,11 @@ class Settings(BaseSettings):
         if self.db.sqlite_path.startswith("/"):
             return self.db.sqlite_path
         return str(pathlib.Path(self.app.config_dir) / self.db.sqlite_path)
+
+
+_forwarded_allow_ips = Settings().app.forwarded_allow_ips
+if _forwarded_allow_ips in ("0.0.0.0/0", "*"):
+    logger.warning(
+        "FORWARDED_ALLOW_IPS is set to allow all IPs (%s). For production, set ABR_APP__FORWARDED_ALLOW_IPS to your reverse proxy IP(s).",
+        _forwarded_allow_ips,
+    )

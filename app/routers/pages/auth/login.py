@@ -62,6 +62,19 @@ async def login(
 
     auth_redirect_uri = str(request.url_for("login_oidc"))
     scheme = oidc_config.get_redirect_scheme(session)
+    x_forwarded_proto = request.headers.get("X-Forwarded-Proto")
+
+    if (
+        scheme == "auto"
+        and x_forwarded_proto
+        and request.url.scheme != x_forwarded_proto.lower()
+    ):
+        logger.warning(
+            "X-Forwarded-Proto header present but not trusted by Uvicorn. OIDC redirect URI may use the wrong scheme. Check that ABR_APP__FORWARDED_ALLOW_IPS includes your reverse proxy IP.",
+            request_scheme=request.url.scheme,
+            client_ip=request.client.host if request.client else "unknown",
+        )
+
     if scheme == "http":
         auth_redirect_uri = auth_redirect_uri.replace("https:", "http:")
     elif scheme == "https":
@@ -71,6 +84,9 @@ async def login(
         "Redirecting to OIDC login",
         authorize_endpoint=authorize_endpoint,
         redirect_uri=auth_redirect_uri,
+        redirect_scheme=scheme,
+        request_scheme=request.url.scheme,
+        x_forwarded_proto=x_forwarded_proto,
     )
 
     state = jwt.encode(
